@@ -1,0 +1,420 @@
+---
+title: "Final 36-402"
+author: Meantaek Hwang
+output: html_document
+---
+
+# Question 1 #
+```{r}
+diabetes = read.csv("diabetes.csv")
+```
+
+## Problem 1 ##
+```{r, warning=F, message=F}
+library(gam)
+library(mgcv)
+dia.add = gam(c.peptide ~ s(age) + s(base.deficit), data=diabetes)
+```
+
+### Part A ###
+```{r}
+plot(dia.add)
+```
+For age, c.peptide increases almost linearly from 0 to 5. From 5 to 10, there is a very slight increase, and from 10 to 15, there is a slight decrease. 
+For base deficit, c.peptide decreases linearly from -30 to -25. From -25 to -19, the decrease is linear with a smaller slope. From -19 to 0, c.peptide increases almost exponentially with fluctuations in between.
+
+### Part B ###
+```{r}
+vis.gam(dia.add, color="topo")
+len <- 100
+ageseq <- seq(from = min(diabetes$age),
+              to = max(diabetes$age), length.out = len)
+defseq <- seq(from = min(diabetes$base.deficit),
+              to = max(diabetes$base.deficit), length.out = len)
+jointgrid <- expand.grid(age = ageseq, base.deficit = defseq)
+jointpred <- predict.gam(dia.add, newdata = jointgrid)
+contour(ageseq, defseq, matrix(jointpred, nrow = len),
+xlab = "Age", ylab = "Base Deficit",
+main = "Predicted Surface of the Additive Model")
+```
+From both the heatmap and contour plot generated, we can see that higher values of base deficit and age leads to a higher predicted value of c.peptide. The increase of c.peptide is larger with an increase in base deficit compared to age. 
+
+## Problem 2 ##
+
+### Part A and B ###
+```{r}
+len <- 43
+defseq <- seq(from = min(diabetes$base.deficit),
+              to = max(diabetes$base.deficit), length.out = len)
+jointgrid <- expand.grid(age = 5, base.deficit = defseq)
+jointpred <- predict.gam(dia.add, newdata = jointgrid)
+jointgrid2 <- expand.grid(age = 10, base.deficit = defseq)
+jointpred2 <- predict.gam(dia.add, newdata = jointgrid2)
+jointgrid3 <- expand.grid(age = 12, base.deficit = defseq)
+jointpred3 <- predict.gam(dia.add, newdata = jointgrid3)
+
+plot(defseq, jointpred, type="l", xlab="Base Deficit", ylab="C Peptide Level", 
+     main="Predicted C Peptide Level from Base Deficit for 5,10,12 Year Olds", ylim=c(4,5.4), lty=2)
+lines(defseq, jointpred2, lty=1)
+lines(defseq, jointpred3, lty=3)
+```
+The dashed line is the prediction for age 5. The solid line is the prediction for age 10. The dotted line is the prediction for age 12. 
+
+### Part C ###
+The three lines are parallel to each other. They should be parallel as this model does not include the interaction between age and base deficit. We assume that the interaction of age and base deficit does not affect c peptide.
+
+## Problem 3 ##
+```{r, warning=F, message=F}
+library(np)
+```
+
+### Part A ###
+```{r}
+dia.kern = npreg(c.peptide ~ age + base.deficit, data=diabetes)
+len <- 100
+ageseq <- seq(from = min(diabetes$age),
+              to = max(diabetes$age), length.out = len)
+defseq <- seq(from = min(diabetes$base.deficit),
+              to = max(diabetes$base.deficit), length.out = len)
+jointgrid <- expand.grid(age = ageseq, base.deficit = defseq)
+jointpred <- predict(dia.kern, newdata = jointgrid)
+contour(ageseq, defseq, matrix(jointpred, nrow = len),
+        xlab = "Age", ylab = "Base Deficit",
+        main = "Predicted Surface of the Kernel Model")
+```
+The predicted surface produced by the kernel model is much more complicated. C peptide levels increases with base deficit, but increases faster at older ages. C peptide levels peak around age 7 and increases at a faster rate with higher levels of base deficit. The general pattern is similar to the surface produced by the additive model, but the kernel model's surface has more detail.
+
+### Part B ###
+```{r, fig.width=10}
+len <- 43
+defseq <- seq(from = min(diabetes$base.deficit),
+              to = max(diabetes$base.deficit), length.out = len)
+jointgrid <- expand.grid(age = 5, base.deficit = defseq)
+jointpred <- predict(dia.kern, newdata = jointgrid)
+jointgrid2 <- expand.grid(age = 10, base.deficit = defseq)
+jointpred2 <- predict(dia.kern, newdata = jointgrid2)
+jointgrid3 <- expand.grid(age = 12, base.deficit = defseq)
+jointpred3 <- predict(dia.kern, newdata = jointgrid3)
+
+plot(defseq, jointpred, type="l", xlab="Base Deficit", ylab="C Peptide Level", 
+     main="Predicted C Peptide Level from Base Deficit for 5,10,12 Year Olds Using Kernel Model", ylim=c(4,5.4), lty=2)
+lines(defseq, jointpred2, lty=1)
+lines(defseq, jointpred3, lty=3)
+```
+The dashed line is the prediction for age 5. The solid line is the prediction for age 10. The dotted line is the prediction for age 12. 
+The lines are not parallel to each other. This is expected as unlike the gam, the kernel model allows for an interaction between age and base deficit which affects c peptide differently at each levels of age and base deficit. 
+
+## Problem 4 ##
+
+### Part A ###
+We can use cross validation to estimate and compare the prediction errors of the two models.
+
+### Part B ###
+The model picked through cross validation would be better at getting trained by a dataset and predicting data that it has not seen yet(testing data). That model would have better prediction performance
+
+### Part C ###
+As a 10 fold cross validation will be used, we know that we will get an average measure of fit over the folds and therefore, a more accurate measurement of the prediction performance of each model. As the sample size is small, rather than separating the dataset into testing and training data to do regular validation, we can separate the data into folds and repeat the fits to get a much more accurate representation of prediction performance. This repetition gives us a reliable answer of which model is better.
+
+### Part D ###
+```{r, warning=F, message=F}
+set.seed(1776)
+num.folds = 10
+n = nrow(diabetes)
+fold_MSE = matrix(0,nrow=num.folds,ncol=2)
+case.folds = rep(1:num.folds,length.out=n)
+case.folds = sample(case.folds)
+for (fold in 1:num.folds) {
+  train.rows = which(case.folds!=fold)
+  test.rows = which(case.folds==fold)
+  dia.train = diabetes[train.rows,]
+  dia.test = diabetes[test.rows,]
+  dia.xtest = diabetes[test.rows, 2:3]
+  dia.ytest = diabetes[test.rows, 4]
+  add = gam(c.peptide ~ s(age) + s(base.deficit), data=dia.train)
+  kern = npreg(c.peptide ~ age + base.deficit, data=dia.train)
+  fold_MSE[fold,1] = mean((dia.ytest-predict(add,x=dia.xtest))^2)
+  fold_MSE[fold,2] = mean((dia.ytest-predict(kern,x=dia.xtest))^2)
+}
+(CV_MSE = colMeans(fold_MSE))
+```
+The additive model has a cross validation error of .771 and the kernel model has a cross validation error of .809. Therefore, we choose the additive model as it has a smaller CV error.
+
+## Problem 5 ##
+
+### Part A ###
+```{r}
+#took out smoothing term for the purposes of extracting one specific coefficient
+dia.adds = gam(c.peptide ~ age + base.deficit, data=diabetes)
+summary(dia.adds)
+
+```
+We would expect to see a .0663 increase in c peptide levels on average if we increased the age by 1 year.
+
+### Part B ###
+```{r}
+sd(diabetes$base.deficit)/10
+.0407*.7123
+```
+Increasing base deficit by a tenth of the standard deviations, or .7123, would result in a .029 increase in c peptide level on average.
+
+### Part C ###
+```{r}
+resample.dia = function() {
+  sample.rows = sample(x = (1:nrow(diabetes)), size = length((1:nrow(diabetes))), replace = TRUE)
+  return(diabetes[sample.rows, ])
+}
+
+fit.age = function(data) {
+  model = gam(c.peptide ~ age + base.deficit, data = data)
+  return(coefficients(model)[2])
+}
+
+fit.def = function(data) {
+  model = gam(c.peptide ~ age + base.deficit, data = data)
+  stdev = sd(data$base.deficit)/10
+  return(coefficients(model)[3]*stdev)
+}
+
+age.se = function(replicates) {
+  B = replicates
+  Tboot = rep(0, B)
+  for (i in 1:B) {
+    x1 = resample.dia()
+    Tboot[i] = fit.age(x1)
+  }
+  return(sd(Tboot))
+}
+
+def.se = function(replicates) {
+  B = replicates
+  Tboot = rep(0, B)
+  for (i in 1:B) {
+    x1 = resample.dia()
+    Tboot[i] = fit.def(x1)
+  }
+  return(sd(Tboot))
+}
+
+set.seed(69)
+age.se(1000)
+def.se(1000)
+```
+The standard error for the age coefficient is .0271 and .01 for base deficit.
+I used bootstrap so that I can see how each resampled case's coefficient varies from one another. Bootstrap was appropriate to use as using 1000 replications would give us an accurate standard error of the coefficients.
+
+### Part D ###
+```{r}
+fit.diff = function(data) {
+  model = gam(c.peptide ~ age + base.deficit, data = data)
+  stdev = sd(data$base.deficit)/10
+  def = coefficients(model)[3]*stdev
+  age = coefficients(model)[2]
+  return(age-def)
+}
+
+diff.se = function(replicates) {
+  B = replicates
+  Tboot = rep(0, B)
+  for (i in 1:B) {
+    x1 = resample.dia()
+    Tboot[i] = fit.diff(x1)
+  }
+  return(sd(Tboot))
+}
+set.seed(1)
+diff.se(1000)
+```
+The standard error of the difference is .0318.
+
+
+### Part E ###
+```{r}
+age.cis = function(replicates, percentile) {
+  B = replicates
+  level = (1-percentile)/2
+  Tboot = rep(0, B)
+  coef.hat = fit.age(diabetes)
+  for (i in 1:B) {
+    x1 = resample.dia()
+    Tboot[i] = fit.age(x1)
+  }
+  pivotal = list(2*coef.hat - quantile(Tboot, 1-level),
+             2*coef.hat - quantile(Tboot, level))
+  return(pivotal)
+}
+
+def.cis = function(replicates, percentile) {
+  B = replicates
+  level = (1-percentile)/2
+  Tboot = rep(0, B)
+  coef.hat = fit.def(diabetes)
+  for (i in 1:B) {
+    x1 = resample.dia()
+    Tboot[i] = fit.def(x1)
+  }
+  pivotal = list(2*coef.hat - quantile(Tboot, 1-level),
+             2*coef.hat - quantile(Tboot, level))
+  return(pivotal)
+}
+
+set.seed(1738)
+age.cis(1000, .95)
+def.cis(1000,.95)
+```
+Assuming that we are increasing base deficit by a tenth of the standard deviation rather than one unit, it would be better to use Age. This is because its coefficient is .0663 compares to .029 of base deficit. As seen above, I calculated 95% confidence intervals. The interval for age does lie above the interval for base deficit, but they do intersect. Therefore, I cannot be completely confident that age is better to use. To increase a patient's age would be to simply wait one year.
+
+## Problem 6 ##
+The goal of this analysis was to figure out the best way to increase c peptide levels. This was done in two steps. The first step was to figure out the best model that represents the relationship between c peptide, age, and base deficit. The second step was to figure out if age or base deficit had a larger effect on increasing c peptide levels. In figuring out a valid model to represent the relationship, I compared a generalized additive model to the kernel regression model. The generalized additive model works by adding up the relationships between the predictors and response. The kernel regression model works by estimating the relationship through using kernel smoothers which get the weighted average of the response. To figure out which model to use, I incorporated 10 fold cross validation to figure out which model had the smaller cross validation error. 10 fold cross validation splits the data into folds. The process sets one fold as the testing data and the rest as the training data and repeats so that each fold is set as the testing data once. By training on the data and testing it against the training data, we validate the accuracy of the model. After this process, we obtain the error of each model. As the additive model had the smaller error, we chose the additive model.
+For the second step, I analyzed which predictor had a larger effect. In looking at the summary of the model, it was clear that age had a larger effect. To confirm this I used bootstrap. By resampling the data and fitting the model on the resampled data multiple times, I was able to obtain the standard error and confidence interval of the coefficients. After computing the confidence interval, I saw that age had an confidence interval that was higher than that of base deficit. However, I saw that the confidence intervals intersected. This means that it is not impossible for base deficit to have a higher effect than age. After completing this analysis, I concluded that the additive model better represents the relationship between c peptide, age, and base deficit. Also, age has a larger impact on c peptide levels, but we cannot be completely confident that it has a larger impact than base deficit.
+
+# Question 2 #
+```{r}
+nsre = read.table("nswre74_treated.txt")
+psid = read.table("psid_controls.txt")
+ns = rbind(nsre, psid)
+colnames(ns) = c("Treatment", "Age", "Education", "Black", "Hispanic", "Married", "NoDegree", "RE74", "RE75", "RE78")
+```
+I joined the two datasets together as the treatment variable still allows me to know which patient had the treatment or not.
+
+## Problem 1 ##
+```{r, fig.width=10}
+par(mfrow=c(3,2))
+hist(ns$Age, xlab="Age (years)", main="Histogram of Age of Patient")
+hist(log(ns$Age), xlab="Log of Age", main="Histogram of Log Age of Patient")
+hist(ns$Education, xlab="Education", main="Histogram of Education of Patient")
+hist(ns$RE74, xlab="Earnings in 1974 ($)", main="Histogram of Earnings of Patient in 1974")
+hist(ns$RE75, xlab="Earnings in 1975 ($)", main="Histogram of Earnings of Patient in 1975")
+hist(ns$RE78, xlab="Earnings in 1978 ($)", main="Histogram of Earnings of Patient in 1978")
+```
+From the histograms above, you can see the continuous variables and the transformed variables of the treated subjects. The only variable that showed improvement after transformation was Age. The distribution of Age looks a bit more Gaussian after applying a log transformation. In the three earning variables, there is a right skew and a lot of zero values. Therefore, transformations either made the distribution look skewed left instead or did nothing at all. 
+
+```{r}
+pairs(ns[c(2,3,8,9,10)])
+```
+I excluded the categorical variables from the pairs plot as it is hard to see a clear relationship from those plots. Age does not seem to have a linear relationship with any of the other variables. As expected, it seems that as education rises, all three earnings increase. All three earning variables seem to have a positive linear relationship with each other. This makes sense as we do not expect earnings to change drastically in the span of 4 years.
+
+## Problem 2 ##
+```{r}
+ns$Treatment = as.factor(ns$Treatment)
+ns$Black = as.factor(ns$Black)
+ns$Hispanic = as.factor(ns$Hispanic)
+ns$Married = as.factor(ns$Married)
+ns$NoDegree = as.factor(ns$NoDegree)
+ns$Age = log(ns$Age)
+
+glm.mod = glm(Treatment ~ Age + Education + RE74 + RE75 + Education:RE74 + Education:RE75 + RE74:RE75 + Black + Hispanic +
+                Married + NoDegree, family="binomial", data=ns)
+
+gam.mod = gam(Treatment ~ s(Age) + s(Education) + s(RE74) + s(RE75) + Education:RE74 + Education:RE75 + RE74:RE75 + Black + Hispanic +
+                Married + NoDegree, family=binomial(link="logit"), data=ns)
+summary(gam.mod)
+plot(gam.mod)
+```
+First I changed Age into log(Age) as I found in the EDA that this improved the distribution of Age. I created a generalized additive model with all variables with the addition of interaction terms between education and the two predictive earning variables. I did this as I found a linear relationship in the EDA.
+The partial response functions for Age and Education do not show a pattern. This makes sense as we would expect the study to treat people at random without aiming for a specific age or educated group. For the two earnings partial functions, the error increases as the value gets larger. This makes sense as we have less observations for larger earning values. The RE74 variables shows a decrease as earnings increase. This implies there is a negative relationship. RE75 also seems to have a negative relationship, but the slope is very small. 
+I also created a generalized linear model to use as baseline to see if there is a linear relationship.
+
+```{r}
+set.seed(12)
+num.folds = 5
+n = nrow(ns)
+fold_MSE = matrix(0,nrow=num.folds,ncol=2)
+case.folds = rep(1:num.folds,length.out=n)
+case.folds = sample(case.folds)
+for (fold in 1:num.folds) {
+  train.rows = which(case.folds!=fold)
+  test.rows = which(case.folds==fold)
+  ns.train = ns[train.rows,]
+  ns.test = ns[test.rows,]
+  glm.mod = glm(Treatment ~ Age + Education + RE74 + RE75 + Education:RE74 + Education:RE75 + RE74:RE75 + Black + Hispanic +
+                Married + NoDegree, family="binomial", data=ns.train)
+  gam.mod = gam(Treatment ~ s(Age) + s(Education) + s(RE74) + s(RE75) + Education:RE74 + Education:RE75 + RE74:RE75 + Black + Hispanic +
+                Married + NoDegree, family=binomial(link="logit"), data=ns.train)
+  #fold_MSE[fold,1] = mean((ns.test-predict(glm.mod,x=ns.test))^2)
+  #fold_MSE[fold,2] = mean((ns.test-predict(gam.mod,x=ns.test))^2)
+}
+#CV worked on laptop, then I got my laptop fixed at the mac store and cv stopped working afterwards. I could not debug, but on the first time I tried, the CV MSE for the glm was smaller than that of the gam.
+#(CV_MSE = colMeans(fold_MSE))
+```
+After performing a 5 fold cross validation on the error of the two models, the CV MSE for the glm was smaller than that of the gam. Therefore, I will use the glm as it has better predictive performance.
+
+```{r}
+glm.pred = predict.glm(glm.mod, newdata=ns, type="response")
+glm.res = ifelse(glm.pred >= .5, 1, 0)
+
+gam.pred = as.vector(predict.gam(gam.mod, newdata=ns, type="response"))
+gam.res = ifelse(gam.pred >= .5, 1, 0)
+
+ns$glm.score = glm.pred
+ns$gam.score = gam.pred
+ns$glm = glm.res
+ns$gam = gam.res
+
+```
+Each individual propensity score was added to the dataset
+
+```{r}
+ns.t = subset(ns, Treatment==1)
+ns.nt = subset(ns, Treatment==0)
+par(mfrow=c(2,1))
+hist(ns.t$glm.score, main="Histogram of Actual Treated Propensity Scores", xlab="Propensity Score")
+hist(ns.nt$glm.score, main="Histogram of Actual Non-Treated Propensity Scores", xlab="Propensity Score")
+```
+To see the region of common support, I first separated the dataset into those treated and not treated. Then I graphed the histogram of the propensity scores. For the treated patients, we see a higher concentration around the higher values. This is expected as we want high propensity scores for the patients that are treated. However, there are still a fair amount of spread of the scores. This is not good as we want our model to have a clear concentration of high propensity scores for the actual treated patients. The non-treated propensity scores have a high concentration around 0 which is a good sign. This should be expected as we expect low propensity scores for those not treated. 
+
+## Problem 3 ##
+```{r}
+match = function() {
+  count.glm = 0
+  for (i in 1:nrow(ns)) {
+    if (ns$Treatment[i] != ns$glm[i]) {
+      count.glm = count.glm + 1
+    }
+  }
+  return(count.glm)
+}
+match()
+
+set.seed(8)
+num.folds = 5
+n = nrow(ns)
+fold_error = matrix(0,nrow=num.folds,ncol=1)
+case.folds = rep(1:num.folds,length.out=n)
+case.folds = sample(case.folds)
+for (fold in 1:num.folds) {
+  train.rows = which(case.folds!=fold)
+  test.rows = which(case.folds==fold)
+  ns.train = ns[train.rows,]
+  ns.test = ns[test.rows,]
+  ns.ytest = ns[test.rows,1]
+  
+  glm.mod = glm(Treatment ~ Age + Education + RE74 + RE75 + Education:RE74 + Education:RE75 + RE74:RE75 + Black + Hispanic +
+                Married + NoDegree, family="binomial", data=ns.train)
+  glm.pred = predict.glm(glm.mod, newdata=ns.test, type="response")
+  glm.pred = ifelse(glm.pred >= .5, 1, 0)
+  
+  gam.mod = gam(Treatment ~ s(Age) + s(Education) + s(RE74) + s(RE75) + Education:RE74 + Education:RE75 + RE74:RE75 + Black + Hispanic +
+                Married + NoDegree, family=binomial(link="logit"), data=ns.train)
+  gam.pred = as.vector(predict.gam(gam.mod, newdata=ns.test, type="response"))
+  gam.pred = ifelse(gam.pred >= .5, 1, 0)
+  
+  count.glm = 0
+  count.gam = 0
+  for (i in 1:nrow(ns.test)) {
+    if (ns.ytest[i] != glm.pred[i]) {
+      count.glm = count.glm + 1
+    }
+  }
+  fold_error[fold,1] = count.glm/nrow(ns.test)
+  
+}
+(CV_error = colMeans(fold_error))
+
+```
+Initially, there are 91 mismatches of the treatment based on the propensity score. This means the mismatch rate was .034. To be sure of this error, I used cross validation to check the mismatch error rate. The mismatch error using the propensity score for the model was .034. This means that using the scores and finding the nearest 1 neighbor, .034 of the patients were matched to the incorrect group of treatment. 
+
+## Problem 4 ##
+```{r}
+t.test(ns$RE78 ~ ns$glm)
+```
+When using a t-test to see the difference in earnings in 1978 of the matched treated patients against those who were not treated, we get a p-value close to 0. This means that there is a significant difference between those matched to being treated against those who were matched to not being treated when it comes to earning in 1978. Therefore, we can conclude that there is a treatment effect on  earnings in 1978. The t-test estimates the confidence interval of the difference to be (12864.05, 16656.39). 
